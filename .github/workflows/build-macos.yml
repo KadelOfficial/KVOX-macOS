@@ -79,9 +79,9 @@ jobs:
           VERSION='0.4.0'
           DIST="$PWD/dist"
           STAGE="$PWD/stage"
-          DMGROOT="$PWD/dmg-root"
-          rm -rf "$DIST" "$STAGE" "$DMGROOT"
-          mkdir -p "$DIST" "$STAGE/Library/Audio/Plug-Ins/VST3" "$STAGE/Library/Audio/Plug-Ins/Components" "$DMGROOT"
+          INSTALLER_ROOT="$PWD/installer-root"
+          rm -rf "$DIST" "$STAGE" "$INSTALLER_ROOT"
+          mkdir -p "$DIST" "$STAGE/Library/Audio/Plug-Ins/VST3" "$STAGE/Library/Audio/Plug-Ins/Components" "$INSTALLER_ROOT"
 
           VST3="$(find build-macos -type d -name 'KVOX.vst3' -path '*Release*' -print -quit)"
           AU="$(find build-macos -type d -name 'KVOX.component' -path '*Release*' -print -quit)"
@@ -114,12 +114,12 @@ jobs:
             --install-location / \
             "$PKG"
 
-          cat > "$DMGROOT/READ ME.txt" <<'TXT'
+          cat > "$INSTALLER_ROOT/READ ME.txt" <<'TXT'
           KVOX 0.4.0 — macOS Universal
 
           INSTALL
           1. Open KVOX-0.4.0-macOS-Universal.pkg
-          2. Continue > Install
+          2. Click Continue > Install
           3. Restart your DAW and rescan plug-ins if needed.
 
           INSTALLED FORMATS
@@ -129,12 +129,13 @@ jobs:
           COMPATIBILITY
           Apple Silicon (arm64) + Intel (x86_64), macOS 11 or newer.
 
+          SIGNING
           This free build is ad-hoc signed, not Apple-notarized. If Gatekeeper blocks the installer,
           Control-click the PKG > Open, or allow it in System Settings > Privacy & Security.
           TXT
 
-          cp "$PKG" "$DMGROOT/"
-          cat > "$DMGROOT/Uninstall KVOX.command" <<'SH'
+          cp "$PKG" "$INSTALLER_ROOT/"
+          cat > "$INSTALLER_ROOT/Uninstall KVOX.command" <<'SH'
           #!/bin/bash
           set -e
           sudo rm -rf '/Library/Audio/Plug-Ins/VST3/KVOX.vst3'
@@ -142,12 +143,21 @@ jobs:
           echo 'KVOX has been removed. Restart your DAW.'
           read -r -p 'Press Return to close...'
           SH
-          chmod +x "$DMGROOT/Uninstall KVOX.command"
+          chmod +x "$INSTALLER_ROOT/Uninstall KVOX.command"
 
-          hdiutil create -volname "KVOX ${VERSION}" -srcfolder "$DMGROOT" -ov -format UDZO "$DIST/KVOX-${VERSION}-macOS-Universal.dmg"
+          ditto -c -k --sequesterRsrc --keepParent "$INSTALLER_ROOT" "$DIST/KVOX-${VERSION}-macOS-Universal-Installer.zip"
           ditto -c -k --sequesterRsrc --keepParent "$VST3" "$DIST/KVOX-${VERSION}-VST3-macOS-Universal.zip"
           ditto -c -k --sequesterRsrc --keepParent "$AU" "$DIST/KVOX-${VERSION}-AU-macOS-Universal.zip"
+
+          if hdiutil create -volname "KVOX ${VERSION}" -srcfolder "$INSTALLER_ROOT" -ov -format UDZO "$DIST/KVOX-${VERSION}-macOS-Universal.dmg"; then
+            echo 'DMG created successfully.'
+          else
+            echo 'DMG creation is not permitted on this GitHub runner; PKG and Installer ZIP are complete and will still be uploaded.'
+            rm -f "$DIST/KVOX-${VERSION}-macOS-Universal.dmg"
+          fi
+
           (cd "$DIST" && shasum -a 256 * > SHA256SUMS.txt)
+          echo 'Distribution files:'
           ls -lh "$DIST"
 
       - name: Upload ready-to-install macOS files
