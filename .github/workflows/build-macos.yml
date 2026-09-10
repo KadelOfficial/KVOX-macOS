@@ -23,17 +23,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p recovered
+          cat payload2/source.part.*.b64 > /tmp/kvox-source.b64
           python3 - <<'PY'
           import base64, pathlib
-          src = pathlib.Path('payload/source.part.00.b64')
-          raw = base64.b64decode(src.read_text().strip())
+          encoded = ''.join(pathlib.Path('/tmp/kvox-source.b64').read_text().split())
+          raw = base64.b64decode(encoded, validate=True)
           pathlib.Path('/tmp/kvox-source.tar.gz').write_bytes(raw)
           print(f'Decoded {len(raw)} bytes')
           PY
-          tar -tzf /tmp/kvox-source.tar.gz | head -80
+          tar -tzf /tmp/kvox-source.tar.gz
           tar -xzf /tmp/kvox-source.tar.gz -C recovered
           echo 'Recovered project files:'
-          find recovered -maxdepth 4 -type f | sort | head -120
+          find recovered -maxdepth 4 -type f | sort
 
       - name: Locate project and install JUCE 9.0.2
         shell: bash
